@@ -241,9 +241,7 @@ def readyz() -> tuple[Response, int]:
 def list_todos() -> tuple[Response, int]:
     with db_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id, title, done, created_at FROM todos ORDER BY id DESC"
-            )
+            cur.execute("SELECT id, title, done, created_at FROM todos ORDER BY id DESC")
             rows = [
                 {
                     "id": r["id"],
@@ -282,8 +280,7 @@ def create_todo() -> tuple[Response, int]:
     with db_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "INSERT INTO todos (title) VALUES (%s) "
-                "RETURNING id, title, done, created_at",
+                "INSERT INTO todos (title) VALUES (%s) RETURNING id, title, done, created_at",
                 (title,),
             )
             row = cur.fetchone()
