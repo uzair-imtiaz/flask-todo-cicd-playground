@@ -21,7 +21,7 @@ name: ci
 on:
   push:
     branches: [master]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [master]
 
@@ -57,8 +57,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
           cache-dependency-path: sample-app/requirements.txt
 
       - name: Install lint tools
@@ -97,8 +97,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
           cache-dependency-path: sample-app/requirements.txt
 
       - name: Install runtime + test deps
@@ -141,10 +141,10 @@ jobs:
     needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
-      contents: read         # checkout
-      packages: write        # push to GHCR
-      id-token: write        # mint OIDC JWT for build provenance attestation
-      attestations: write    # write the attestation back to the repo
+      contents: read # checkout
+      packages: write # push to GHCR
+      id-token: write # mint OIDC JWT for build provenance attestation
+      attestations: write # write the attestation back to the repo
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -223,13 +223,15 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: "1"
           # Cache the vuln DB to avoid hitting the GHCR rate limit for the DB image.
-          cache: 'true'
+          cache: "true"
 
       - name: Generate build provenance attestation
-        # Skip on PRs: we did not push, so there's nothing to attest in a registry.
-        if: github.event_name != 'pull_request' && steps.build.outputs.digest != ''
+        if: >
+          github.event_name != 'pull_request' &&
+          github.event.repository.visibility == 'public' &&
+          steps.build.outputs.digest != ''
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
