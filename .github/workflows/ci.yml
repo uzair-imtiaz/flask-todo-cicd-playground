@@ -5,11 +5,11 @@
 #   test  -> pytest (placeholder no-op suite for now; real tests land later)
 #   build -> docker buildx, multi-stage, with GitHub Actions layer cache
 #   scan  -> Trivy, fail on HIGH/CRITICAL with a fix available
-#   push  -> GHCR (ghcr.io/<owner>/flask-todo) on push to main and on v* tags
+#   push  -> GHCR (ghcr.io/<owner>/flask-todo) on push to master and on v* tags
 #
 # Triggers:
 #   pull_request : runs lint, test, build (load locally), scan. Does NOT push.
-#   push to main : runs everything and pushes ghcr.io/<owner>/flask-todo:<sha>
+#   push to master : runs everything and pushes ghcr.io/<owner>/flask-todo:<sha>
 #   v* git tag   : runs everything and pushes ghcr.io/<owner>/flask-todo:<semver>
 #
 # Auth:
@@ -20,10 +20,10 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 # Default-deny. Each job opts back in to the minimum scope it needs.
 permissions: {}
@@ -133,7 +133,7 @@ jobs:
   # -----------------------------------------------------------------------
   # Build + scan + push.
   #   PRs           : build, load locally, scan. Do NOT push.
-  #   push to main  : build, scan, push ghcr.io/<owner>/flask-todo:sha-<short>
+  #   push to master  : build, scan, push ghcr.io/<owner>/flask-todo:sha-<short>
   #   v* git tags   : build, scan, push ghcr.io/<owner>/flask-todo:<semver>
   # -----------------------------------------------------------------------
   build-and-push:
