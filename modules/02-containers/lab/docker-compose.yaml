@@ -1,0 +1,60 @@
+# docker-compose.yaml for local development of flask-todo.
+#
+# Run from this directory:
+#   docker compose up --build
+#
+# The default build context is this directory (lab/). The named build context
+# "src" points to sample-app/ so the Dockerfile can pull app source from there
+# without copying it into lab/ at build time.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: todos
+    # Healthcheck so `app` waits until Postgres actually accepts connections,
+    # not just until the container starts.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d todos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    ports:
+      # Bound to localhost only: a misconfigured host firewall cannot leak it.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        # Lets the Dockerfile do `COPY --from=src app.py ./`.
+        src: ../../../sample-app
+    image: flask-todo:dev
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/todos
+      LOG_LEVEL: INFO
+      PORT: "8000"
+    ports:
+      - "127.0.0.1:8080:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Drop every Linux capability the app does not need. Flask + gunicorn need none.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # gunicorn writes a small heartbeat file to /tmp; tmpfs lets the read-only
+    # rootfs above stay read-only without breaking gunicorn.
+    tmpfs:
+      - /tmp
+
+volumes:
+  db-data:

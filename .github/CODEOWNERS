@@ -1,0 +1,32 @@
+# CODEOWNERS for the playground repo.
+#
+# Save this file as either:
+#   .github/CODEOWNERS   (preferred; keeps the repo root clean)
+#   CODEOWNERS           (also valid)
+#   docs/CODEOWNERS      (also valid)
+#
+# Reviewers must have WRITE access to the repo to be assignable.
+# The LAST matching pattern wins (different from .gitignore semantics).
+#
+# Replace the @-handles below with your actual GitHub username (or a team you
+# belong to). For a solo playground repo, replace every entry with @uzair-imtiaz.
+
+# Default owner: catches anything not matched by a more specific rule.
+*                                       @uzair-imtiaz
+
+# Application source. In a real repo this would be @arbisoft/app-team.
+/sample-app/                            @uzair-imtiaz
+
+# Container build files. In a real repo this would be @arbisoft/platform.
+/modules/02-containers/lab/             @uzair-imtiaz
+
+# CI/CD changes. Touchy; route to the platform team and (in real life) security.
+/.github/                               @uzair-imtiaz
+/.github/workflows/                     @uzair-imtiaz
+
+# Pre-commit config. Affects every contributor's local workflow.
+/.pre-commit-config.yaml                @uzair-imtiaz
+
+# CODEOWNERS itself. Changes to who owns what should be reviewed by the same
+# people who already own the repo.
+/.github/CODEOWNERS                     @uzair-imtiaz

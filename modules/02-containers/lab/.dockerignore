@@ -1,0 +1,45 @@
+# .dockerignore for the build context (this directory).
+#
+# Keeps build context small and stops developer-only or sensitive files from
+# leaking into the image. A missing .dockerignore is a silent footgun: the
+# whole directory tree gets sent to the daemon on every build, and any secret
+# in the path becomes a candidate to be baked in by a careless `COPY . .`.
+
+# VCS and editor noise
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python local artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+htmlcov/
+.coverage
+.python-version
+
+# Environment / secrets we never want baked in
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# Compose override files: developer-local, do not bake in
+docker-compose.override.yaml
+docker-compose.override.yml
+
+# Documentation: not part of the running image
+README.md
+*.md

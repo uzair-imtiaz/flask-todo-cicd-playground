@@ -1,0 +1,60 @@
+# .github/dependabot.yml
+#
+# Dependabot config for the playground repo. Save at .github/dependabot.yml.
+#
+# What it does:
+#   - Bumps SHA-pinned GitHub Actions in .github/workflows/ when upstream
+#     publishes a new release. Dependabot writes the new SHA + the trailing
+#     `# vX.Y.Z` version comment so PRs are reviewable.
+#   - Bumps Python deps in sample-app/requirements.txt when a new version
+#     ships, including security advisories.
+#
+# Dependabot opens PRs against the default branch. CI runs against those PRs;
+# branch protection still gates them. Auto-merge is intentionally not enabled
+# in this module: you read the changelog, you merge.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Karachi"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci(actions)"
+      include: "scope"
+
+  - package-ecosystem: "pip"
+    directory: "/sample-app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:30"
+      timezone: "Asia/Karachi"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps(python)"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    # Dependabot's docker ecosystem watches the FROM lines in your Dockerfile.
+    # Keeps python:3.12-slim-bookworm and postgres:16-alpine fresh.
+    directory: "/modules/02-containers/lab"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"

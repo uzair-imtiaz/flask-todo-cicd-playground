@@ -1,0 +1,61 @@
+# .pre-commit-config.yaml
+#
+# Pre-commit hooks for the playground repo. Save at the repo root.
+#
+# Setup:
+#   pip install pre-commit
+#   pre-commit install            # registers the git hook
+#   pre-commit run --all-files    # one-time sweep
+#
+# The same checks live in CI (see .github/workflows/ci.yml). Pre-commit is the
+# fast local mirror; CI is the enforceable gate. Do not skip with --no-verify.
+
+# Pin each hook repo to a tagged release. The pre-commit framework verifies
+# the rev exists; you can `pre-commit autoupdate` to bump these in a PR.
+
+repos:
+  # Generic file hygiene: trailing whitespace, EOF newline, large files, YAML.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # GitHub Actions workflows allow !! tag overrides; allow multi-doc.
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Python lint + format. Same tool, single config.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Dockerfile lint. Uses the hadolint container; needs Docker running locally.
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+        # Only run on Dockerfiles, not random text files that mention FROM.
+        files: '(?i)(^|/)dockerfile(\..+)?$'
+
+  # Secret scanning. Catches AWS keys, GitHub PATs, private keys, etc., before
+  # they ever leave your machine. The CI job is the second line of defense.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # GitHub Actions workflow lint. Catches typos, unknown contexts, and the
+  # most common YAML errors before you push.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint

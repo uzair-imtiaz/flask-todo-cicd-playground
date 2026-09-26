@@ -1,0 +1,237 @@
+# .github/workflows/ci.yml
+#
+# Continuous integration for flask-todo:
+#   lint  -> ruff + hadolint
+#   test  -> pytest (placeholder no-op suite for now; real tests land later)
+#   build -> docker buildx, multi-stage, with GitHub Actions layer cache
+#   scan  -> Trivy, fail on HIGH/CRITICAL with a fix available
+#   push  -> GHCR (ghcr.io/<owner>/flask-todo) on push to main and on v* tags
+#
+# Triggers:
+#   pull_request : runs lint, test, build (load locally), scan. Does NOT push.
+#   push to main : runs everything and pushes ghcr.io/<owner>/flask-todo:<sha>
+#   v* git tag   : runs everything and pushes ghcr.io/<owner>/flask-todo:<semver>
+#
+# Auth:
+#   GHCR uses the auto-issued GITHUB_TOKEN. No long-lived registry credentials.
+#   ECR + OIDC is covered in Module 4; the snippet in README.md shows the swap.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+# Default-deny. Each job opts back in to the minimum scope it needs.
+permissions: {}
+
+# A second push to the same branch cancels the first. Saves runner minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository_owner is lowercased by Docker requirements; GHCR refuses
+  # uppercase repo names. ${{ github.repository_owner }} preserves the case the
+  # owner registered with, so we lowercase it explicitly below in `meta`.
+  IMAGE_NAME: flask-todo
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Lint: fast feedback. Style + Dockerfile rules. Seconds to run.
+  # -----------------------------------------------------------------------
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: sample-app/requirements.txt
+
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff==0.7.4
+
+      - name: ruff check
+        run: ruff check sample-app/
+
+      - name: ruff format --check
+        run: ruff format --check sample-app/
+
+      - name: hadolint Dockerfile
+        # Lints the Dockerfile from Module 2's lab.
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: modules/02-containers/lab/Dockerfile
+          # Don't fail the whole build on info-level findings; warnings up.
+          failure-threshold: warning
+
+  # -----------------------------------------------------------------------
+  # Test: pytest. The sample-app has no real tests yet; we run a no-op suite
+  # so the wiring is in place. Real tests land in a later iteration.
+  # -----------------------------------------------------------------------
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: sample-app/requirements.txt
+
+      - name: Install runtime + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r sample-app/requirements.txt
+          pip install pytest==8.3.3
+
+      - name: Run pytest (placeholder suite)
+        # We grep the tree for test files first so that an empty test suite
+        # does not fail the job. `pytest` itself exits 5 on collection-empty;
+        # we sidestep that by only invoking pytest when at least one test
+        # file is present. Real test failures still exit non-zero.
+        run: |
+          if find sample-app -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
+            pytest -q sample-app/
+          else
+            echo "no tests yet; placeholder pass."
+          fi
+
+      - name: Upload pytest report (always, even on failure)
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: pytest-${{ github.run_id }}
+          path: |
+            .pytest_cache/
+            **/junit*.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -----------------------------------------------------------------------
+  # Build + scan + push.
+  #   PRs           : build, load locally, scan. Do NOT push.
+  #   push to main  : build, scan, push ghcr.io/<owner>/flask-todo:sha-<short>
+  #   v* git tags   : build, scan, push ghcr.io/<owner>/flask-todo:<semver>
+  # -----------------------------------------------------------------------
+  build-and-push:
+    name: build-and-push
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read         # checkout
+      packages: write        # push to GHCR
+      id-token: write        # mint OIDC JWT for build provenance attestation
+      attestations: write    # write the attestation back to the repo
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Buildx
+        # Buildx is the BuildKit-backed builder. Required for cache-from/to=gha.
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
+
+      - name: Log in to GHCR
+        # Skip on PRs from forks: GITHUB_TOKEN there is read-only by design.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags + labels
+        id: meta
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5.6.1
+        with:
+          # docker/metadata-action lowercases the image name automatically
+          # before emitting the tag. Required because GHCR rejects uppercase
+          # repo names; github.repository_owner preserves case, so without
+          # this action's lowercasing the push would fail for any
+          # mixed-case GitHub org.
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          # latest=false keeps the metadata action from auto-tagging :latest.
+          # Immutable tags only; semver and short-sha are the publishable ones.
+          flavor: |
+            latest=false
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          # Default build context: the lab/ directory, because the Dockerfile
+          # does `COPY healthcheck.py ./` relative to its build context.
+          # `file:` is relative to the workflow's working directory (repo root).
+          context: modules/02-containers/lab
+          file: modules/02-containers/lab/Dockerfile
+          # Named build context "src" feeds Dockerfile lines:
+          #   COPY --from=src requirements.txt .
+          #   COPY --from=src --chown=app:app app.py ./
+          build-contexts: |
+            src=sample-app
+          # PRs: load into the runner's local engine so we can scan it.
+          # Push to GHCR only on push events (branches and tags).
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Build-cache backed by GitHub Actions cache. Keeps layer cache
+          # warm across runs without bloating the artifact store.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Single-arch in this lab (amd64). Multi-arch lands in Module 4
+          # when the image targets ECS Fargate's mix of arm64/amd64.
+          platforms: linux/amd64
+
+      - name: Scan image with Trivy
+        # Fails the build on HIGH or CRITICAL findings that have a fix available.
+        # ignore-unfixed: do not block on CVEs the upstream cannot fix yet.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          # The first tag in metadata's output. On PRs that's the locally-loaded
+          # image; on push events it's the just-pushed registry tag.
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          # Cache the vuln DB to avoid hitting the GHCR rate limit for the DB image.
+          cache: 'true'
+
+      - name: Generate build provenance attestation
+        # Skip on PRs: we did not push, so there's nothing to attest in a registry.
+        if: github.event_name != 'pull_request' && steps.build.outputs.digest != ''
+        uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
